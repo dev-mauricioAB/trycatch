@@ -10,10 +10,12 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { ProjectStackSelector } from './ProjectStackSelector';
-import { ProjectSkillSelector } from './ProjectSkillSelector';
+import { SkillSelector } from '@/components/shared/SkillSelector';
+import { useWatch } from 'react-hook-form';
 import { useCurrentUser } from '@/lib/use-current-user';
 import { toast } from 'sonner';
 import { MoneyInput } from '@/components/form/MoneyInput/MoneyInput';
+import { getStackAssignmentLabel } from '@/lib/stack-assignment';
 
 const projectSchema = z.object({
   name: z.string().min(3, 'Nome do projeto é obrigatório'),
@@ -54,6 +56,9 @@ export function ProjectForm({ editIdProp }: { editIdProp?: string } = {}) {
   const editId = editIdProp;
   const [editingProject, setEditingProject] =
     useState<ProjectDetailsType | null>(null);
+  const [stackAssignments, setStackAssignments] = useState<
+    Record<string, string>
+  >({});
 
   const methods = useForm<ProjectFormData>({
     resolver: zodResolver(projectSchema),
@@ -73,6 +78,12 @@ export function ProjectForm({ editIdProp }: { editIdProp?: string } = {}) {
     handleSubmit,
     formState: { errors, isSubmitting },
   } = methods;
+
+  const selectedSkills =
+    useWatch({
+      control: methods.control,
+      name: 'skills',
+    }) ?? [];
 
   const onSubmit: (data: ProjectFormData) => Promise<void> = async (data) => {
     if (!user) {
@@ -137,6 +148,13 @@ export function ProjectForm({ editIdProp }: { editIdProp?: string } = {}) {
         if (!res.ok) throw new Error('Não foi possível buscar projeto');
         const data = (await res.json()) as ProjectDetailsType;
         setEditingProject(data);
+        const assignments = Object.fromEntries(
+          (data.stacks || []).map((stack) => [
+            stack.stackId,
+            getStackAssignmentLabel(stack) ?? '',
+          ])
+        );
+        setStackAssignments(assignments);
         methods.reset({
           name: data.name || '',
           description: data.description || '',
@@ -175,14 +193,33 @@ export function ProjectForm({ editIdProp }: { editIdProp?: string } = {}) {
           </div>
 
           <div>
-            <ProjectSkillSelector />
+            <SkillSelector
+              selectedSkills={selectedSkills}
+              errorMessage={errors.skills?.message}
+              onAddSkill={(skillId) =>
+                methods.setValue('skills', [...selectedSkills, skillId], {
+                  shouldDirty: true,
+                  shouldValidate: true,
+                })
+              }
+              onRemoveSkill={(skillId) =>
+                methods.setValue(
+                  'skills',
+                  selectedSkills.filter((id) => id !== skillId),
+                  {
+                    shouldDirty: true,
+                    shouldValidate: true,
+                  }
+                )
+              }
+            />
             {errors.skills && (
               <p className="text-sm text-red-500">{errors.skills.message}</p>
             )}
           </div>
 
           <div>
-            <ProjectStackSelector />
+            <ProjectStackSelector stackAssignments={stackAssignments} />
             {errors.stacks && (
               <p className="text-sm text-red-500">
                 {'message' in errors.stacks ? errors.stacks.message : ''}
